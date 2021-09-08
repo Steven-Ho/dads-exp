@@ -1,11 +1,14 @@
 import torch
+from torch.distributions.utils import logits_to_probs
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributions import OneHotCategorical, Categorical, Normal
+from torch.distributions import OneHotCategorical, Categorical, Normal, Independent
 import numpy as np
 
 LOG_SIG_MAX = 2
 LOG_SIG_MIN = -20
+SIG_MAX_PRED = 10
+SIG_MIN_PRED = 0.3
 EPS = 1e-6
 
 # Initialize weights
@@ -154,49 +157,48 @@ class Discriminator(nn.Module):
         return label, loggt, log_p
 
 class Predictor(nn.Module):
-    def __init__(self, num_inputs, hidden_dim, num_outputs, action_std=None):
+    def __init__(self, num_inputs, num_modes, hidden_dim, num_outputs, output_std=1.0) -> None:
         super(Predictor, self).__init__()
-
-        self.linear1 = nn.Linear(num_inputs, hidden_dim)
+        # Input: s, z
+        # Output: delta s
+        self.linear1 = nn.Linear(num_inputs + num_modes, hidden_dim)
         self.linear2 = nn.Linear(hidden_dim, hidden_dim)
-        self.mean_linear = nn.Linear(hidden_dim, num_outputs)
-        self.log_std_linear = nn.Linear(hidden_dim, num_outputs)
-        self.action_std = action_std # Fixed std
-
-        self.apply(weights_init)
-
-    def forward(self, state):
-        x = F.relu(self.linear1(state))
-        x = F.relu(self.linear2(x))
-        mean = self.mean_linear(x)
-        if self.action_std is None:
-            log_std = self.log_std_linear(x)
+        self.mean = nn.Linear(hidden_dim, num_outputs)
+        if output_std is None:
+            self.std = nn.Linear(hidden_dim, num_outputs)
         else:
-            log_std = torch.log(self.action_std).repeat(mean.shape)
-        log_std = torch.clamp(log_std, min=LOG_SIG_MIN, max=LOG_SIG_MAX)
-        return mean, log_std
+            self.std = torch.FloatTensor([output_std])
+        self.output_std = output_std
 
-    def sample(self, state):
-        mean, log_std = self.forward(state)
-        std = log_std.exp()
-        dist = Normal(mean, std)
+    def forward(self, state, label):
+        # Input: state, one-hot label
+        x = torch.cat([state, label], dim=-1)
+        x = F.relu(self.linear1(x))
+        x = F.relu(self.linear2(x))
+        mean = self.mean(x)
+        if self.output_std is None:
+            std = self.std(x)
+        else:
+            std = self.std.repeat(mean.shape)
+        return mean, std
+
+    def sample(self, state, label):
+        mean, std = self.forward(state, label)
+        dist = Independent(Normal(mean, std), 1)
         pred = dist.rsample()
         log_prob = dist.log_prob(pred)
         return pred, log_prob, mean
 
-    def evaluate(self, state, pred):
-        mean, log_std = self.forward(state)
-        std = log_std.exp()
-        dist = Normal(mean, std)
-        logprobs = dist.log_prob(pred)
-        logprobs = torch.sum(logprobs, dim=-1)
-        dist_entropy = dist.entropy()   
-        dist_entropy = torch.sum(dist_entropy, dim=-1)
-        return logprobs, dist_entropy    
+    def evaluate(self, state, label, pred):
+        mean, std = self.forward(state, label)
+        dist = Independent(Normal(mean, std), 1)
+        log_prob = dist.log_prob(pred)
+        dist_entropy = dist.entropy()
+        return log_prob, dist_entropy        
 
     def to(self, device):
-        if self.action_std is not None:
-            self.action_std = self.action_std.to(device)
+        if self.output_std is not None:
+            self.std = self.std.to(device)
         return super(Predictor, self).to(device)
 
 class CategoricalPolicy(nn.Module):
