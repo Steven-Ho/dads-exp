@@ -34,11 +34,12 @@ parser.add_argument('--alpha', type=float, default=0.2, help='Temperature parame
                         term against the reward (default: 0.2)')
 parser.add_argument('--automatic_entropy_tuning', type=bool, default=False, help='Automaically adjust α (default: False)')
 parser.add_argument('--batch_size', type=int, default=200, help="maximum number of steps retrieved from buffer")
+parser.add_argument('--disc_batch_size', type=int, default=200, help="batch size for predictor")
 parser.add_argument('--pred_lr', type=float, default=0.00003, help="learning rate for predictor")
 parser.add_argument('--cuda', action='store_false', help='run on GPU (default: True)')
 parser.add_argument('--policy', type=str, default="Gaussian", help="policy type for backend")
 parser.add_argument('--num_modes', type=int, default=10, help="number of modes that need to learn")
-parser.add_argument('--reward_scale', type=float, default=1, help="scale factor for pseudo reward")
+parser.add_argument('--reward_scale', type=float, default=100, help="scale factor for pseudo reward")
 parser.add_argument('--algo', type=str, default='sac', help="training algorithm for agent learning")
 parser.add_argument('--schedule', type=str, default='random', help="learning schedule for policy modes")
 parser.add_argument('--run', type=int, default=1, help="index of individual runs")
@@ -111,7 +112,8 @@ for i_episode in itertools.count(1):
                     updates += 1
             label_batch, state_batch, _, _, _, next_state_batch, _ = memory.sample(batch_size=args.disc_batch_size)
             label_onehot_batch = convert_to_onehot(label_batch, args.num_modes)
-            d_loss = dtrainer.update_parameters((label_onehot_batch, state_batch, next_state_batch))
+            state_delta_batch = next_state_batch - state_batch
+            d_loss = dtrainer.update_parameters((state_batch, label_onehot_batch, state_delta_batch*1000))
             writer.add_scalar('loss/disc', d_loss, timestep)
 
         new_obs, reward, done, _ = env.step(action.tolist())
@@ -121,10 +123,12 @@ for i_episode in itertools.count(1):
         # alt_labels = np.random.randint(0, N, L)
         L = args.num_modes
         alt_labels = np.arange(0, L)
-        logp = dtrainer.score(obs, new_obs, convert_to_onehot(l, args.num_modes))
+        obs_delta = new_obs - obs
+        logp = dtrainer.score(obs, convert_to_onehot(l, args.num_modes), obs_delta*1000)
         alt_obs = np.tile(obs, [L,1])
         alt_new_obs = np.tile(new_obs, [L,1])
-        alt_logp = dtrainer.score(alt_obs, alt_new_obs, convert_to_onehot(alt_labels, args.num_modes))
+        alt_obs_delta = alt_new_obs - alt_obs
+        alt_logp = dtrainer.score(alt_obs, convert_to_onehot(alt_labels, args.num_modes), alt_obs_delta*1000)
 
         writer.add_scalar('logp/logp', logp, timestep)
         writer.add_scalar('logp/alt_logp', alt_logp.mean(), timestep)

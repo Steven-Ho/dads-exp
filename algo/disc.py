@@ -26,7 +26,9 @@ class PredTrainer():
         state = torch.FloatTensor(state).to(self.device)
         label = torch.FloatTensor(label).to(self.device)
         state_delta = torch.FloatTensor(state_delta).to(self.device)
+        self.pred.eval()
         log_prob, _ = self.pred.evaluate(state, label, state_delta)
+        self.pred.train()
         return log_prob.squeeze().detach().cpu().numpy()
 
     def update_parameters(self, samples):

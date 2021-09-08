@@ -49,6 +49,34 @@ class FreeRun(gym.Env):
         else:
             return GOALS[0]
 
+    # def step(self, action):
+    #     self.acc = deepcopy(action)
+    #     self.acc = np.reshape(self.acc, (2,))
+    #     self.vel *= 0.98 # damping term
+    #     self.vel += self.acc * self.dt
+    #     self.vel = self._vclip(self.vel)
+    #     self.pos += self.vel * self.dt
+    #     state = self._state()
+    #     reward = -1./20 # Time penalty
+        
+    #     info = {}
+    #     self.t += 1
+    #     done = (self.t == self.max_steps)
+    #     if self.curr_goal < len(GOALS):
+    #         goal_dist = np.linalg.norm(np.array(GOALS[self.curr_goal]) - self.pos)
+    #         if goal_dist < GOAL_RADIUS:
+    #             reward += 50
+    #             self.curr_goal += 1
+    #     else:
+    #         done = True
+    #     if self.curr_goal < len(GOALS):
+    #         info = {"goal": GOALS[self.curr_goal]}
+    #     else:
+    #         info = {"goal": GOALS[0]}
+    #     # if done:
+    #     #     reward = np.linalg.norm(self.pos)
+    #     self.trajectory.append(deepcopy(self.pos))
+    #     return state, reward, done, info
     def step(self, action):
         self.acc = deepcopy(action)
         self.acc = np.reshape(self.acc, (2,))
@@ -57,27 +85,15 @@ class FreeRun(gym.Env):
         self.vel = self._vclip(self.vel)
         self.pos += self.vel * self.dt
         state = self._state()
-        reward = -1./20 # Time penalty
-        
+        reward = 0
         info = {}
         self.t += 1
         done = (self.t == self.max_steps)
-        if self.curr_goal < len(GOALS):
-            goal_dist = np.linalg.norm(np.array(GOALS[self.curr_goal]) - self.pos)
-            if goal_dist < GOAL_RADIUS:
-                reward += 50
-                self.curr_goal += 1
-        else:
-            done = True
-        if self.curr_goal < len(GOALS):
-            info = {"goal": GOALS[self.curr_goal]}
-        else:
-            info = {"goal": GOALS[0]}
-        # if done:
-        #     reward = np.linalg.norm(self.pos)
+        if done:
+            reward = np.linalg.norm(self.pos)
         self.trajectory.append(deepcopy(self.pos))
         return state, reward, done, info
-
+        
     def render(self, mode='human', close=False, message=None):
         img = np.zeros((1024, 1024, 3), np.uint8)
         scale_f = 51.2

@@ -169,9 +169,11 @@ class Predictor(nn.Module):
         else:
             self.std = torch.FloatTensor([output_std])
         self.output_std = output_std
+        self.output_bn = nn.BatchNorm1d(num_outputs)
 
     def forward(self, state, label):
         # Input: state, one-hot label
+        # state = self.bn(state)
         x = torch.cat([state, label], dim=-1)
         x = F.relu(self.linear1(x))
         x = F.relu(self.linear2(x))
@@ -191,6 +193,7 @@ class Predictor(nn.Module):
 
     def evaluate(self, state, label, pred):
         mean, std = self.forward(state, label)
+        pred_bn = self.output_bn(pred)
         dist = Independent(Normal(mean, std), 1)
         log_prob = dist.log_prob(pred)
         dist_entropy = dist.entropy()
