@@ -122,17 +122,19 @@ for i_episode in itertools.count(1):
         # N = args.num_modes
         # alt_labels = np.random.randint(0, N, L)
         L = args.num_modes
-        alt_labels = np.arange(0, L)
+        # alt_labels = np.arange(0, L)
+        alt_labels = np.concatenate([np.arange(0, label), np.arange(label+1, L)])
         obs_delta = new_obs - obs
         logp = dtrainer.score(obs, convert_to_onehot(l, args.num_modes), obs_delta*1000)
-        alt_obs = np.tile(obs, [L,1])
-        alt_new_obs = np.tile(new_obs, [L,1])
+        alt_obs = np.tile(obs, [L-1,1])
+        alt_new_obs = np.tile(new_obs, [L-1,1])
         alt_obs_delta = alt_new_obs - alt_obs
         alt_logp = dtrainer.score(alt_obs, convert_to_onehot(alt_labels, args.num_modes), alt_obs_delta*1000)
 
         writer.add_scalar('logp/logp', logp, timestep)
         writer.add_scalar('logp/alt_logp', alt_logp.mean(), timestep)
-        sr = np.log(L+1) - np.log(1+np.exp(np.clip(alt_logp - logp, -20, 1)).sum(axis=0))
+        writer.add_scalar('logp/alt_logp_max', alt_logp.max(), timestep)
+        sr = np.log(L) - np.log(1+np.exp(np.clip(alt_logp - logp, -20, 1)).sum(axis=0))
         sr *= scale
 
         episode_reward += reward
@@ -162,7 +164,7 @@ for i_episode in itertools.count(1):
             int(running_reward/args.log_interval), int(running_sr/args.log_interval)))
         if running_sr/args.log_interval > max_mean_sr:
             max_mean_sr = running_sr/args.log_interval
-            trainer.save_model(args.scenario, suffix="dads", silent=True)
+            trainer.save_model(args.scenario, prefix="models/{}/run{}/".format(args.scenario, args.run), suffix="dads", silent=True)
         avg_length = 0
         running_reward = 0
         running_sr = 0
@@ -172,4 +174,5 @@ for i_episode in itertools.count(1):
         break
 
 # trainer.save_model(args.scenario, suffix="dads")
+print("Models saved to "+"models/{}/run{}/".format(args.scenario, args.run))
 env.close()    

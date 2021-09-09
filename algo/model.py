@@ -204,6 +204,64 @@ class Predictor(nn.Module):
             self.std = self.std.to(device)
         return super(Predictor, self).to(device)
 
+class GMMPredictor(nn.Module):
+    def __init__(self, num_inputs, num_modes, hidden_dim, num_outputs, output_std=1.0, num_components=4) -> None:
+        super(GMMPredictor, self).__init__()
+        # Input: s, z
+        # Output: delta s
+        self.linear1 = nn.Linear(num_inputs + num_modes, hidden_dim)
+        self.linear2 = nn.Linear(hidden_dim, hidden_dim)
+        self.logits = nn.Linear(hidden_dim, num_components)
+        self.means = []
+        self.stds = []
+        for _ in range(num_components):
+            self.means.append(nn.Linear(hidden_dim, num_outputs))
+            if output_std is None:
+                self.stds.append(nn.Linear(hidden_dim, num_outputs))
+            else:
+                self.stds.append(torch.FloatTensor([output_std]))
+        self.output_std = output_std
+        self.num_components = num_components
+        self.output_bn = nn.BatchNorm1d(num_outputs)
+
+    def forward(self, state, label):
+        # Input: state, one-hot label
+        # state = self.bn(state)
+        x = torch.cat([state, label], dim=-1)
+        x = F.relu(self.linear1(x))
+        x = F.relu(self.linear2(x))
+        means = []
+        stds = []
+        logits = self.logits(x)
+        for i in range(self.num_components):
+            means.append(self.means[i](x))
+            if self.output_std is None:
+                stds.append(self.stds[i](x))
+            else:
+                stds.append(self.stds[i].repeat(self.means[i].shape))
+        return means, stds, logits
+
+    def sample(self, state, label):
+        means, stds, logits = self.forward(state, label)
+        comp = Independent(Normal(means, stds), 1)
+        mix = Categorical(logits=logits)
+        # pred = dist.rsample()
+        # log_prob = dist.log_prob(pred)
+        # return pred, log_prob, mean
+
+    def evaluate(self, state, label, pred):
+        mean, std = self.forward(state, label)
+        pred_bn = self.output_bn(pred)
+        dist = Independent(Normal(mean, std), 1)
+        log_prob = dist.log_prob(pred)
+        dist_entropy = dist.entropy()
+        return log_prob, dist_entropy        
+
+    def to(self, device):
+        if self.output_std is not None:
+            self.std = self.std.to(device)
+        return super(GMMPredictor, self).to(device)
+
 class CategoricalPolicy(nn.Module):
     def __init__(self, num_inputs, action_dims, hidden_dim):
         super(CategoricalPolicy, self).__init__()
