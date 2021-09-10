@@ -2,3 +2,7 @@
 __pycache__
 logs
 models
+test*
+wde.py
+wsre.py
+*.jpg

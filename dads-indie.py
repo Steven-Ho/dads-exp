@@ -42,7 +42,7 @@ parser.add_argument('--num_modes', type=int, default=10, help="number of modes t
 parser.add_argument('--reward_scale', type=float, default=100, help="scale factor for pseudo reward")
 parser.add_argument('--algo', type=str, default='sac', help="training algorithm for agent learning")
 parser.add_argument('--schedule', type=str, default='random', help="learning schedule for policy modes")
-parser.add_argument('--run', type=int, default=10, help="index of individual runs")
+parser.add_argument('--run', type=int, default=12, help="index of individual runs")
 
 args = parser.parse_args()
 np.random.seed(args.seed)
@@ -56,10 +56,11 @@ action_space = env.action_space
 discrete_action = hasattr(action_space, 'n')
 
 from algo.sac import SACTrainer
-trainer = SACTrainer(obs_shape + args.num_modes, action_space, args)
+trainers = [SACTrainer(obs_shape, action_space, args) for _ in range(args.num_modes)]
 update_interval = 1
 updates_per_step = 1
-memory = ReplayMemory(args.buffer_limit)
+memories = [ReplayMemory(args.buffer_limit) for _ in range(args.num_modes)]
+cache = ReplayMemory(args.buffer_limit)
 
 # TensorboardX
 logdir = 'logs/dads_{}_{}_{}'.format(args.algo, args.scenario, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
@@ -76,7 +77,7 @@ timestep = 0
 updates = 0
 scale = args.reward_scale
 max_mean_sr = 0
-input_amp = 1000
+input_amp = 1
 for i_episode in itertools.count(1):
     obs = env.reset()
     episode_reward = 0
@@ -85,9 +86,8 @@ for i_episode in itertools.count(1):
     label = np.random.randint(0, high=args.num_modes)
     l = np.array([label])
     for t in range(args.max_episode_len):
-        wobs = wrapped_obs(obs, l, args.num_modes)
         if args.start_steps < timestep:
-            action, logprob = trainer.act(wobs)
+            action, logprob = trainers[label].act(obs)
             if len(action.shape) > 1:
                 action = action[0]
             if discrete_action:
@@ -96,14 +96,12 @@ for i_episode in itertools.count(1):
             action = env.action_space.sample()
             logprob = np.array([1.0])
 
-        if len(memory) > args.start_steps:
+        if timestep > args.start_steps:
             if timestep % update_interval == 0:
                 for _ in range(args.updates_per_step):
-                    label_batch, state_batch, action_batch, logprob_batch, reward_batch, next_state_batch, mask_batch = memory.sample(batch_size=args.batch_size)
-                    wstate_batch = wrapped_obs(state_batch, label_batch, args.num_modes)
-                    wnext_state_batch = wrapped_obs(next_state_batch, label_batch, args.num_modes)
+                    label_batch, state_batch, action_batch, logprob_batch, reward_batch, next_state_batch, mask_batch = memories[label].sample(batch_size=args.batch_size)
 
-                    c1_loss, c2_loss, p_loss, ent_loss, alpha = trainer.update_parameters((wstate_batch, action_batch, logprob_batch, reward_batch, wnext_state_batch, mask_batch), updates)
+                    c1_loss, c2_loss, p_loss, ent_loss, alpha = trainers[label].update_parameters((state_batch, action_batch, logprob_batch, reward_batch, next_state_batch, mask_batch), updates)
                     writer.add_scalar('loss/critic_1', c1_loss, updates)
                     writer.add_scalar('loss/critic_2', c2_loss, updates)
                     writer.add_scalar('loss/policy', p_loss, updates)
@@ -111,15 +109,15 @@ for i_episode in itertools.count(1):
                     writer.add_scalar('entropy_temprature/alpha', alpha, updates)                        
                  
                     updates += 1
-            label_batch, state_batch, _, _, _, next_state_batch, _ = memory.sample(batch_size=args.disc_batch_size)
-            label_onehot_batch = convert_to_onehot(label_batch, args.num_modes)
+            label_batch, state_batch, next_state_batch = cache.sample(batch_size=args.disc_batch_size)
             state_delta_batch = next_state_batch - state_batch
+            label_onehot_batch = convert_to_onehot(label_batch, args.num_modes)
             d_loss = dtrainer.update_parameters((state_batch, label_onehot_batch, state_delta_batch * input_amp))
             writer.add_scalar('loss/disc', d_loss, timestep)
 
         new_obs, reward, done, _ = env.step(action.tolist())
 
-        if len(memory) > args.start_steps:
+        if timestep > args.start_steps:
             L = args.num_modes
             alt_labels = np.concatenate([np.arange(0, label), np.arange(label+1, L)])
             obs_delta = new_obs - obs
@@ -147,7 +145,8 @@ for i_episode in itertools.count(1):
         else:
             mask = float(not done)
 
-        memory.push((label, obs, action, logprob, sr * src + reward * rc, new_obs, mask))
+        memories[label].push((label, obs, action, logprob, sr * src + reward * rc, new_obs, mask))
+        cache.push((l, obs, new_obs))
         obs = new_obs
         if done:
             break
@@ -165,7 +164,8 @@ for i_episode in itertools.count(1):
             int(running_reward/args.log_interval), int(running_sr/args.log_interval)))
         if running_sr/args.log_interval > max_mean_sr:
             max_mean_sr = running_sr/args.log_interval
-            trainer.save_model(args.scenario, prefix="models/{}/run{}/".format(args.scenario, args.run), suffix="dads", silent=True)
+            for x in range(len(trainers)):
+                trainers[label].save_model(args.scenario, prefix="models/{}/run{}/".format(args.scenario, args.run), suffix="dads_indie_{}".format(x), silent=True)
         avg_length = 0
         running_reward = 0
         running_sr = 0

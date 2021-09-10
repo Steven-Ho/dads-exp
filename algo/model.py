@@ -8,7 +8,7 @@ import numpy as np
 LOG_SIG_MAX = 2
 LOG_SIG_MIN = -20
 SIG_MAX_PRED = 10
-SIG_MIN_PRED = 0.3
+SIG_MIN_PRED = 0.05
 EPS = 1e-6
 
 # Initialize weights
@@ -169,7 +169,7 @@ class Predictor(nn.Module):
         else:
             self.std = torch.FloatTensor([output_std])
         self.output_std = output_std
-        self.output_bn = nn.BatchNorm1d(num_outputs)
+        self.output_bn = nn.BatchNorm1d(num_outputs, affine=False)
 
     def forward(self, state, label):
         # Input: state, one-hot label
@@ -193,9 +193,9 @@ class Predictor(nn.Module):
 
     def evaluate(self, state, label, pred):
         mean, std = self.forward(state, label)
-        pred_bn = self.output_bn(pred)
+        pred_bn = self.output_bn(pred) * 10.0
         dist = Independent(Normal(mean, std), 1)
-        log_prob = dist.log_prob(pred)
+        log_prob = dist.log_prob(pred_bn)
         dist_entropy = dist.entropy()
         return log_prob, dist_entropy        
 
