@@ -62,7 +62,7 @@ updates_per_step = 1
 memory = ReplayMemory(args.buffer_limit)
 
 # TensorboardX
-logdir = 'logs/dads_{}_{}_{}'.format(args.algo, args.scenario, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+logdir = 'logs_new/dads_{}_{}_{}'.format(args.algo, args.scenario, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
 writer = SummaryWriter(logdir=logdir)
 
 dtrainer = PredTrainer(obs_shape, args)

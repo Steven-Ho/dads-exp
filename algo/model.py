@@ -17,6 +17,11 @@ def weights_init(m):
         torch.nn.init.xavier_uniform_(m.weight, gain=1)
         torch.nn.init.constant_(m.bias, 0)
 
+def weights_init_pred(m):
+    if isinstance(m, nn.Linear):
+        torch.nn.init.xavier_uniform_(m.weight, gain=0.1)
+        torch.nn.init.constant_(m.bias, 0)
+
 class MLP(nn.Module):
     def __init__(self, num_inputs, hidden_dim, num_outputs):
         super(MLP, self).__init__()
@@ -170,6 +175,7 @@ class Predictor(nn.Module):
             self.std = torch.FloatTensor([output_std])
         self.output_std = output_std
         self.output_bn = nn.BatchNorm1d(num_outputs, affine=False)
+        self.apply(weights_init_pred)
 
     def forward(self, state, label):
         # Input: state, one-hot label

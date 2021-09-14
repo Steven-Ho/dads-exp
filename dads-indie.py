@@ -63,7 +63,7 @@ memories = [ReplayMemory(args.buffer_limit) for _ in range(args.num_modes)]
 cache = ReplayMemory(args.buffer_limit)
 
 # TensorboardX
-logdir = 'logs/dads_{}_{}_{}'.format(args.algo, args.scenario, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+logdir = 'logs_new/dads_{}_{}_{}'.format(args.algo, args.scenario, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
 writer = SummaryWriter(logdir=logdir)
 
 dtrainer = PredTrainer(obs_shape, args)
@@ -77,7 +77,7 @@ timestep = 0
 updates = 0
 scale = args.reward_scale
 max_mean_sr = 0
-input_amp = 1
+input_amp = 100
 for i_episode in itertools.count(1):
     obs = env.reset()
     episode_reward = 0
@@ -131,7 +131,7 @@ for i_episode in itertools.count(1):
             writer.add_scalar('logp/alt_logp', alt_logp.mean(), timestep)
             writer.add_scalar('logp/alt_logp_max', alt_logp.max(), timestep)
             writer.add_scalar('bn/var', dtrainer.pred.output_bn.running_var.mean().item(), timestep)
-            sr = np.log(L) - np.log(1+np.exp(np.clip(alt_logp - logp, -20, 1)).sum(axis=0))
+            sr = np.log(L) - np.log(1+np.exp(np.clip(alt_logp - logp, -20, 3)).sum(axis=0))
         else:
             sr = 0.
         sr *= scale

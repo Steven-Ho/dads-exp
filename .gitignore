@@ -1,6 +1,7 @@
 *.txt
 __pycache__
 logs
+logs_new
 models
 test*
 wde.py
