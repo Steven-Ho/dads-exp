@@ -131,7 +131,7 @@ for i_episode in itertools.count(1):
             writer.add_scalar('logp/alt_logp', alt_logp.mean(), timestep)
             writer.add_scalar('logp/alt_logp_max', alt_logp.max(), timestep)
             writer.add_scalar('bn/var', dtrainer.pred.output_bn.running_var.mean().item(), timestep)
-            sr = np.log(L) - np.log(1+np.exp(np.clip(alt_logp - logp, -20, 3)).sum(axis=0))
+            sr = np.log(L) - np.log(1+np.exp(np.clip(alt_logp - logp, -20, 1)).sum(axis=0))
         else:
             sr = 0.
         sr *= scale
@@ -165,7 +165,7 @@ for i_episode in itertools.count(1):
         if running_sr/args.log_interval > max_mean_sr:
             max_mean_sr = running_sr/args.log_interval
             for x in range(len(trainers)):
-                trainers[label].save_model(args.scenario, prefix="models/{}/run{}/".format(args.scenario, args.run), suffix="dads_indie_{}".format(x), silent=True)
+                trainers[x].save_model(args.scenario, prefix="models/{}/run{}/".format(args.scenario, args.run), suffix="dads_indie_{}".format(x), silent=True)
         avg_length = 0
         running_reward = 0
         running_sr = 0

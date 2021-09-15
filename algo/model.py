@@ -199,7 +199,7 @@ class Predictor(nn.Module):
 
     def evaluate(self, state, label, pred):
         mean, std = self.forward(state, label)
-        pred_bn = self.output_bn(pred) * 10.0
+        pred_bn = self.output_bn(pred) * 1.0
         dist = Independent(Normal(mean, std), 1)
         log_prob = dist.log_prob(pred_bn)
         dist_entropy = dist.entropy()
