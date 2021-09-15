@@ -13,7 +13,7 @@ from algo.utils import convert_to_onehot, wrapped_obs
 from tensorboardX import SummaryWriter
 
 parser = argparse.ArgumentParser(description="DADS")
-parser.add_argument('--scenario', type=str, default="FreeRun-v0", help="environment")
+parser.add_argument('--scenario', type=str, default="AntCustom-v0", help="environment")
 parser.add_argument('--num_episodes', type=int, default=2000, help="number of episodes for training")
 parser.add_argument('--max_episode_len', type=int, default=100, help="maximum episode length")
 parser.add_argument('--hidden_dim', type=int, default=64, help="network hidden size")
@@ -48,7 +48,13 @@ args = parser.parse_args()
 np.random.seed(args.seed)
 torch.manual_seed(args.seed)
 
-env = gym.make(args.scenario)
+if args.scenario == "AntCustom-v0":
+    from gym_mm.envs.ant_custom_env import AntCustomEnv
+    env = AntCustomEnv()
+    reduced_obs = True
+else:
+    env = gym.make(args.scenario)
+    reduced_obs = False
 env.seed(args.seed)
 obs_shape_list = env.observation_space.shape
 obs_shape = reduce((lambda x,y: x*y), obs_shape_list)
@@ -65,7 +71,10 @@ memory = ReplayMemory(args.buffer_limit)
 logdir = 'logs_new/dads_{}_{}_{}'.format(args.algo, args.scenario, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
 writer = SummaryWriter(logdir=logdir)
 
-dtrainer = PredTrainer(obs_shape, args)
+if reduced_obs:
+    dtrainer = PredTrainer(2, args)
+else:
+    dtrainer = PredTrainer(obs_shape, args)
 
 src = 1
 rc = 0
@@ -114,7 +123,10 @@ for i_episode in itertools.count(1):
             label_batch, state_batch, _, _, _, next_state_batch, _ = memory.sample(batch_size=args.disc_batch_size)
             label_onehot_batch = convert_to_onehot(label_batch, args.num_modes)
             state_delta_batch = next_state_batch - state_batch
-            d_loss = dtrainer.update_parameters((state_batch, label_onehot_batch, state_delta_batch * input_amp))
+            if reduced_obs:
+                d_loss = dtrainer.update_parameters((state_batch[:,:2], label_onehot_batch, state_delta_batch[:,:2] * input_amp))
+            else:
+                d_loss = dtrainer.update_parameters((state_batch, label_onehot_batch, state_delta_batch * input_amp))
             writer.add_scalar('loss/disc', d_loss, timestep)
 
         new_obs, reward, done, _ = env.step(action.tolist())
@@ -123,11 +135,17 @@ for i_episode in itertools.count(1):
             L = args.num_modes
             alt_labels = np.concatenate([np.arange(0, label), np.arange(label+1, L)])
             obs_delta = new_obs - obs
-            logp = dtrainer.score(obs, convert_to_onehot(l, args.num_modes), obs_delta * input_amp)
+            if reduced_obs:
+                logp = dtrainer.score(obs[:2], convert_to_onehot(l, args.num_modes), obs_delta[:2] * input_amp)
+            else:
+                logp = dtrainer.score(obs, convert_to_onehot(l, args.num_modes), obs_delta * input_amp)
             alt_obs = np.tile(obs, [L-1,1])
             alt_new_obs = np.tile(new_obs, [L-1,1])
             alt_obs_delta = alt_new_obs - alt_obs
-            alt_logp = dtrainer.score(alt_obs, convert_to_onehot(alt_labels, args.num_modes), alt_obs_delta * input_amp)
+            if reduced_obs:
+                alt_logp = dtrainer.score(alt_obs[:,:2], convert_to_onehot(alt_labels, args.num_modes), alt_obs_delta[:,:2] * input_amp)
+            else:
+                alt_logp = dtrainer.score(alt_obs, convert_to_onehot(alt_labels, args.num_modes), alt_obs_delta * input_amp)
 
             writer.add_scalar('logp/logp', logp, timestep)
             writer.add_scalar('logp/alt_logp', alt_logp.mean(), timestep)
