@@ -85,7 +85,7 @@ timestep = 0
 updates = 0
 scale = args.reward_scale
 max_mean_sr = 0
-input_amp = 1000
+input_amp = 100
 for i_episode in itertools.count(1):
     obs = env.reset()
     episode_reward = 0
