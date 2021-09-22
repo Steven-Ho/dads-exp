@@ -18,14 +18,16 @@ class AntCustomEnv(ant.AntEnv):
         self._goal_index = 0
         print('WARNING: GEAR RATIO FOR ANT_CUSTOM_ENV MAY HAVE BEEN SET INCORRECTLY!!!')
         print('WARNING: HIDING XY COORDINATES!!!')
-        assets_dir = os.path.join(os.path.dirname(os.path.realpath(gym.__file__)), 'envs', 'mujoco', 'assets')
-        with open(os.path.join(assets_dir, 'ant.xml')) as f:
+        # assets_dir = os.path.join(os.path.dirname(os.path.realpath(gym.__file__)), 'envs', 'mujoco', 'assets')
+        assets_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'assets')
+        # with open(os.path.join(assets_dir, 'ant.xml')) as f:
+        with open(os.path.join(assets_dir, 'ant_copy.xml')) as f:
             xml = f.read()
         xml_custom_gear = re.sub('gear=\"\d+\"', 'gear=\"%d\"' % gear_ratio, xml)
         filename_custom_gear = os.path.join(assets_dir, 'ant_custom_gear.xml')
         with open(filename_custom_gear, 'w') as f:
             f.write(xml_custom_gear)
-        mujoco_env.MujocoEnv.__init__(self, 'ant_custom_gear.xml', 5)
+        mujoco_env.MujocoEnv.__init__(self, filename_custom_gear, 5)
         utils.EzPickle.__init__(self)
 
     def step(self, a):

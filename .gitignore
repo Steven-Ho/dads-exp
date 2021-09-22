@@ -7,3 +7,4 @@ test*
 wde.py
 wsre.py
 *.jpg
+.vscode

@@ -22,7 +22,7 @@ parser.add_argument('--updates_per_step', type=int, default=1, help='model updat
 parser.add_argument('--start_steps', type=int, default=10000, help='Steps sampling random actions (default: 10000)')
 parser.add_argument('--target_update_interval', type=int, default=1, help='Value target update per no. of updates per step (default: 1)')
 parser.add_argument('--seed', type=int, default=123, help="random seed for env")
-parser.add_argument('--buffer_limit', type=int, default=100000, help="an imagined limit for replay buffer")
+parser.add_argument('--buffer_limit', type=int, default=1000000, help="an imagined limit for replay buffer")
 parser.add_argument('--tau', type=float, default=0.005, help='target smoothing coefficient(τ) (default: 0.005)')
 parser.add_argument('--beta1', type=float, default=0.9, help="beta1 for adam optimizer")
 parser.add_argument('--beta2', type=float, default=0.999, help="beta2 for adam optimizer")
@@ -169,6 +169,7 @@ for i_episode in itertools.count(1):
         if done:
             break
     
+    env.render()
     avg_length += (t+1)
     running_reward += episode_reward
     running_sr += episode_sr
